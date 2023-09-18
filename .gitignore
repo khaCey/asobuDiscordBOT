@@ -24,4 +24,4 @@ dist-ssr
 *.sw?
 
 .env
-vite.config.js.timestamp-1689555316668-7f1db38791cfc.mjs
+credentials.json
