@@ -1,10 +1,11 @@
 require('dotenv').config();
 const { getGoogleAuth, getReadingMaterial } = require('../googleSheets/googleSheetsAPI');
+const sendMessageAndUpdateSheet = require('../tasks/sendMessage');
 const { google } = require('googleapis');
 const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 const validLevels = ['N1', 'N2', 'N3', 'N4', 'N5'];
 
-async function handleSubCommand(message, level) {
+async function handleSubCommand(message, level, client) {
     if (!validLevels.includes(level)) {
         message.reply('Invalid level. Please enter a valid JLPT level (N1, N2, N3, N4, N5).');
         return;
@@ -71,7 +72,7 @@ async function handleSubCommand(message, level) {
         newRow[levelIndex[level]] = 1; // Set the day to 1 for the given level
         await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: 'Subscribers!A:F',
+            range: 'Subscribers!A:K',
             valueInputOption: 'RAW',
             resource: {
                 values: [newRow],
@@ -81,13 +82,8 @@ async function handleSubCommand(message, level) {
 
     message.reply(`You have been subscribed to level ${level}.`);
   
-    // Fetch the reading material for day 1
-    const readingMaterial = await getReadingMaterial(auth, level, 1);
-  
     // Send a DM to the user
-    message.author.send(readingMaterial);
+    await sendMessageAndUpdateSheet(auth, sheets, userId, level, 1, client);
 }
-
-  
 
 module.exports = handleSubCommand;

@@ -1,47 +1,17 @@
 require('dotenv').config();
-const express = require('express');
-const { google } = require('googleapis');
-const userLevels = {};
 const { Client, GatewayIntentBits } = require("discord.js");
+const schedule = require('node-schedule');
+
 const discordToken = process.env.DISCORD_TOKEN;
 const allowedChannels = process.env.ALLOWED_CHANNELS.split(',');
 
+const userLevels = {};
+
 const handleSubCommand = require('./src/commands/subCommand');
-const handleConfirmCommand = require('./src/commands/confirmCommand');
 const handleUnsubCommand = require('./src/commands/unsubCommand');
 const handleDeleteDMCommand = require('./src/commands/deleteDMCommand');
 const handleAppendCommand = require('./src/commands/appendCommand');
-const scheduleDailyTask = require('./src/scheduling/dailyTask');
-
-const app = express();
-
-app.get("/", async(req, res) => {
-  const auth = new google.auth.GoogleAuth({
-    keyFile: "credentials.json",
-    scopes: "https://www.googleapis.com/auth/spreadsheets"
-  });
-
-  const client = await auth.getClient();
-
-  const googleSheets = google.sheets({ version: "v4", auth: "client"});
-
-  const metaData = await googleSheets.spreadsheets.get({
-    auth,
-    spreadsheetId
-  })
-  
-  const getRows = await googleSheets.spreadsheets.values.get({
-    auth,
-    spreadsheetId,
-    range: "N2!A:B",
-  });
-  
-  console.log("logging");
-  res.send(getRows.data.values);
-})
-
-app.listen(5338, (req, res) => console.log('Running on 5338'));
-
+const sendDailyMessages = require('./src/tasks/sendDailyMessages');
 
 const client = new Client({
   intents: [
@@ -70,18 +40,7 @@ client.on('messageCreate', async (message) => {
       level = message.content.split(' ')[1].toUpperCase(); // Convert to uppercase
     }
     userLevels[message.author.id] = level; // Store the level
-    await handleSubCommand(message, level);
-  } else if (message.content.startsWith('/confirm')) {
-    let level;
-    if (message.content.split(' ').length > 1) {
-      level = message.content.split(' ')[1].toUpperCase(); // Convert to uppercase
-    } else {
-      level = userLevels[message.author.id]; // Retrieve the stored level
-    }
-    if (!level) {
-      return message.reply('No previous level found. Please enter a level.');
-    }
-    await handleConfirmCommand(message, level);
+    await handleSubCommand(message, level, client);
   }else if (message.content.startsWith('/clear')) {
     // Check if the user has the necessary permissions
     if (message.member.permissions.has('MANAGE_MESSAGES')) {
@@ -148,5 +107,8 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-  
+const job = schedule.scheduleJob({ hour: 18, minute: 0, second: 0, tz: 'Asia/Tokyo' }, async function() {
+  await sendDailyMessages(client);
+});
+
 client.login(discordToken);
