@@ -3,7 +3,16 @@ const { getGoogleAuth, getReadingMaterial } = require('../googleSheets/googleShe
 const { google } = require('googleapis');
 const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 
-async function handleDeleteDMCommand(message, messageId, dmChannel) {
+async function handleDeleteDMCommand(message, args, client) {
+  const messageId = args[0];
+  const userId = message.author.id;
+  const user = await client.users.fetch(userId);
+
+  // Ensure the DM channel exists
+  let dmChannel = user.dmChannel;
+  if (!dmChannel) {
+    dmChannel = await user.createDM();
+  }
   try {
     const dmMessage = await dmChannel.messages.fetch(messageId);
     await dmMessage.delete();

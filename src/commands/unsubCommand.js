@@ -4,7 +4,8 @@ const { google } = require('googleapis');
 const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 const validLevels = ['N1', 'N2', 'N3', 'N4', 'N5'];
 
-async function handleUnsubCommand(message, level) {
+async function handleUnsubCommand(message, args, client) {
+    let level = args[0].toUpperCase();
     if (!validLevels.includes(level)) {
         message.reply('Invalid level. Please enter a valid JLPT level (N1, N2, N3, N4, N5).');
         return;
@@ -46,7 +47,5 @@ async function handleUnsubCommand(message, level) {
   
     message.reply(`You have been unsubscribed from level ${level}.`);
 }
-
-  
 
 module.exports = handleUnsubCommand;

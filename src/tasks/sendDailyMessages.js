@@ -1,49 +1,59 @@
-const { Client, Intents } = require('discord.js');
 const { getGoogleAuth, getReadingMaterial } = require('../googleSheets/googleSheetsAPI');
 const sendMessageAndUpdateSheet = require('./sendMessage');
 const { google } = require('googleapis');
+const { VALID_LEVELS } = require('../constants'); // Adjust path as needed
 const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 
-// Initialize Discord client (you might already have this somewhere else in your code)
-
 async function sendDailyMessages(client) {
+    console.log("sendDailyMessages called");
     const auth = await getGoogleAuth();
     const sheets = google.sheets({ version: 'v4', auth });
-    
-    // Extend the range to include the last sent date for each level (assuming columns H-L)
     const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: 'Subscribers!A:L',
+      spreadsheetId,
+      range: 'Subscribers!A:L',
     });
-    
+  
     const rows = response.data.values || [];
-    
+    const today = new Date().toLocaleDateString();
+    const levels = ['N5', 'N4', 'N3', 'N2', 'N1'];
+
     for (const row of rows) {
-        const [userId, dayN5, dayN4, dayN3, dayN2, dayN1, lastSentN5, lastSentN4, lastSentN3, lastSentN2, lastSentN1] = row;
-        const rowIndex = rows.findIndex(row => row[0] === userId) + 1; // +1 because Sheets is 1-indexed
-        const today = new Date().toLocaleDateString(); // Get today's date
+        const userId = row[0];
+        const rowIndex = rows.findIndex(row => row[0] === userId) + 1;
+        console.log(`Calculated Row Index: ${rowIndex}`);
 
-        if (dayN5 > 0 && lastSentN5 !== today) {
-            await sendMessageAndUpdateSheet(auth, sheets, userId, 'N5', dayN5, client, rowIndex, 'H');
-        }
-        
-        if (dayN4 > 0 && lastSentN4 !== today) {
-            await sendMessageAndUpdateSheet(auth, sheets, userId, 'N4', dayN4, client, rowIndex, 'I');
-        }
-        
-        if (dayN3 > 0 && lastSentN3 !== today) {
-            await sendMessageAndUpdateSheet(auth, sheets, userId, 'N3', dayN3, client, rowIndex, 'J');
+        if (rowIndex === 0) {
+            console.error(`User ID ${userId} not found in sheet.`);
+            continue; // Skip to the next iteration of the loop
         }
 
-        if (dayN2 > 0 && lastSentN2 !== today) {
-            await sendMessageAndUpdateSheet(auth, sheets, userId, 'N2', dayN2, client, rowIndex, 'K');
-        }
-        
-        if (dayN1 > 0 && lastSentN1 !== today) {
-            await sendMessageAndUpdateSheet(auth, sheets, userId, 'N1', dayN1, client, rowIndex, 'L');
+        let skipLevel = false; // Flag to skip sending the message for this level for this day
+
+        for (let index = 0; index < levels.length; index++) {
+            let level = levels[index];
+            let day = row[index + 1];
+            const lastSent = row[index + 6];
+            const justSubscribed = row[6 + index]; // 6 is the index for column 'G'
+
+            if (justSubscribed === 'true') {
+                // Reset the flag and update the sheet
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId,
+                    range: `Subscribers!${String.fromCharCode(71 + index)}${rowIndex}`, // ASCII for 'G'
+                    valueInputOption: 'RAW',
+                    resource: {
+                        values: [['false']],
+                    },
+                });
+                skipLevel = true;
+            }
+
+            if (day > 0 && lastSent !== today && !skipLevel) {
+                console.log(`About to send message with the following parameters: Auth: ${auth}, Sheets: ${sheets}, User ID: ${userId}, Level: ${level}, Day: ${day}, Client: ${client}, Row Index: ${rowIndex}`);
+                sendMessageAndUpdateSheet(auth, sheets, userId, level, day, client, rowIndex, String.fromCharCode(72 + index));
+            }
         }
     }
 }
-
 
 module.exports = sendDailyMessages;

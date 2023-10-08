@@ -86,5 +86,4 @@ async function appendToSheet(auth, level, title, mainText, vocabList) {
     });
 }
 
-
 module.exports = { getGoogleAuth, getReadingMaterial, readEntriesAndAppend, appendToSheet };

@@ -1,44 +1,44 @@
-const { getGoogleAuth, getReadingMaterial } = require('../googleSheets/googleSheetsAPI');
-const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
+const { getReadingMaterial } = require('../googleSheets/googleSheetsAPI');  // Import any other required modules here
 
-async function sendMessageAndUpdateSheet(auth, sheets, userId, level, day, client) {
-    const today = new Date().toLocaleDateString(); // Get today's date
+async function sendMessageAndUpdateSheet(auth, sheets, userId, level, day, client, rowIndex) {
+  console.log(`sendMessageAndUpdateSheet called for user ${userId} at level ${level}`);
+  
+  // Check if rowIndex is defined
+  if (typeof rowIndex === 'undefined') {
+    console.log("Error: rowIndex is undefined");
+    return;
+  }
 
-    // Fetch the Discord user by ID
+  if (day > 0) {
+    // Send the message for the new 'day' to the user
     const user = await client.users.fetch(userId);
-
-    // Send reading material if the user is subscribed
-    if (day > 0) {
-        const readingMaterial = await getReadingMaterial(auth, level, day);
-        user.send(readingMaterial);
-
-        // Update the last sent date for this level in Google Sheets
-        const range = `Subscribers!A:F`; // Adjust this range based on your sheet
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: range,
-        });
-
-        const rows = response.data.values || [];
-        const rowIndex = rows.findIndex(row => row[0] === userId) + 1; // +1 because Sheets is 1-indexed
-
-        const levelIndex = {
-            'N5': 6,
-            'N4': 7,
-            'N3': 8,
-            'N2': 9,
-            'N1': 10
-        };
-
-        await sheets.spreadsheets.values.update({
-            spreadsheetId,
-            range: `Subscribers!${String.fromCharCode(65 + levelIndex[level])}${rowIndex}`,
-            valueInputOption: 'RAW',
-            resource: {
-                values: [[today]],
-            },
-        });
-    }
+    const readingMaterial = await getReadingMaterial(auth, level, day);
+    user.send(readingMaterial);
+    console.log(`Day counter before increment: ${day}`);
+    
+    // Increment the day counter
+    day++;
+    
+    console.log(`Day counter after increment: ${day}`);
+    
+    // Update the day counter in Google Sheets
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,  // Replace with your actual Spreadsheet ID
+      range: `Subscribers!${String.fromCharCode(66 + ['N5', 'N4', 'N3', 'N2', 'N1'].indexOf(level))}${rowIndex}`,  // Update the cell corresponding to the day counter
+      valueInputOption: 'RAW',
+      resource: {
+        values: [[day]]
+      }
+    });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: `Subscribers!${String.fromCharCode(71 + ['N5', 'N4', 'N3', 'N2', 'N1'].indexOf(level))}${rowIndex}`, // ASCII for 'G'
+      valueInputOption: 'RAW',
+      resource: {
+          values: [['false']],
+      },
+    });
+  }
 }
 
 module.exports = sendMessageAndUpdateSheet;

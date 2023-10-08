@@ -1,16 +1,21 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require("discord.js");
 const schedule = require('node-schedule');
+const { inappropriateWords } = require('./src/constants.js'); 
 
 const discordToken = process.env.DISCORD_TOKEN;
 const allowedChannels = process.env.ALLOWED_CHANNELS.split(',');
 
-const userLevels = {};
+const commandHandlers = {
+  'sub':          require('./src/commands/subCommand'),
+  'unsub':        require('./src/commands/unsubCommand'),
+  'clear':        require('./src/commands/clearCommand'),
+  'del':          require('./src/commands/deleteDMCommand'),
+  'append':       require('./src/commands/appendCommand'),
+  'mimic':        require('./src/commands/mimicCommand'),
+  'debugDayPass': require('./src/commands/debugCommand')
+}
 
-const handleSubCommand = require('./src/commands/subCommand');
-const handleUnsubCommand = require('./src/commands/unsubCommand');
-const handleDeleteDMCommand = require('./src/commands/deleteDMCommand');
-const handleAppendCommand = require('./src/commands/appendCommand');
 const sendDailyMessages = require('./src/tasks/sendDailyMessages');
 
 const client = new Client({
@@ -18,7 +23,6 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    // Add other intents as needed
   ],
 });
 
@@ -27,83 +31,23 @@ client.once('ready', () => {
 });
 
 client.on('messageCreate', async (message) => {
-
-  console.log(message.content);
+  // Chat moderation: Delete messages with inappropriate words
+  const messageContent = message.content.toLowerCase();
+  if (inappropriateWords.some(word => messageContent.includes(word))) {
+    message.delete();
+    message.author.send('Your message contained inappropriate language and was deleted.');
+    return;  // Skip further processing
+  }
+  
   if (!allowedChannels.includes(message.channel.id) || !message.content.startsWith("/") || message.author.bot) {
     console.log("ignore");
-    return; // Ignore messages from other channels
+    return;
   }
+  let args = message.content.slice(1).split(' ');
+  const command = args.shift().toLowerCase();
 
-  if (message.content.startsWith('/sub')) {
-    let level = "";
-    if(message.content.split(' ')[1]){ 
-      level = message.content.split(' ')[1].toUpperCase(); // Convert to uppercase
-    }
-    userLevels[message.author.id] = level; // Store the level
-    await handleSubCommand(message, level, client);
-  }else if (message.content.startsWith('/clear')) {
-    // Check if the user has the necessary permissions
-    if (message.member.permissions.has('MANAGE_MESSAGES')) {
-      const args = message.content.split(' ');
-      const option = args[1];
-
-      if (option === 'all') {
-        // Clear all messages
-        let fetched;
-        do {
-          fetched = await message.channel.messages.fetch({ limit: 100 });
-          message.channel.bulkDelete(fetched);
-        } while (fetched.size >= 2); // Discord API doesn't allow deleting a single message using bulkDelete
-      } else {
-        const deleteCount = parseInt(option, 10);
-
-        // Check if the deleteCount is a number and between 2 and 100
-        if (!deleteCount || deleteCount < 2 || deleteCount > 100) {
-          return message.reply('Please provide a number between 2 and 100 for the number of messages to delete.');
-        }
-
-        // Fetch the messages and delete them
-        const fetched = await message.channel.messages.fetch({ limit: deleteCount });
-        message.channel.bulkDelete(fetched)
-          .catch(error => message.reply(`Couldn't delete messages because of: ${error}`));
-      }
-    } else {
-      message.reply('You don\'t have permission to use this command.');
-    }
-  }else if (message.content.startsWith('/unsub')) {
-    const level = message.content.split(' ')[1].toUpperCase(); // Convert to uppercase
-    await handleUnsubCommand(message, level);
-  }else if (message.content.startsWith('/delete')) {
-    const messageId = message.content.split(' ')[1];
-    const userId = message.author.id;
-    const user = client.users.cache.get(userId);
-
-    // Ensure the DM channel exists
-    let dmChannel = user.dmChannel;
-    if (!dmChannel) {
-      dmChannel = await user.createDM();
-    }
-    await handleDeleteDMCommand(message, messageId, dmChannel);
-  }else if (message.content.startsWith('/mimic')) {
-    const args = message.content.split(' ');
-    const targetChannelId = args[1];
-    const mimicMessage = args.slice(2).join(' ');
-
-    try {
-        const targetChannel = await client.channels.fetch(targetChannelId);
-        console.log(`Channel Type: ${targetChannel.type}`);  // Debugging line
-
-        if (targetChannel && (targetChannel.type === 0 || targetChannel.type === 'DM')) {
-            targetChannel.send(mimicMessage);
-        } else {
-            message.reply('The target channel is not a text channel.');
-        }
-    } catch (error) {
-        console.error(error);
-        message.reply('Could not find the target channel or an error occurred.');
-    }
-  }else if (message.content.startsWith('/append')) {
-    handleAppendCommand(message);
+  if (commandHandlers[command]) {
+    await commandHandlers[command](message, args, client);
   }
 });
 
